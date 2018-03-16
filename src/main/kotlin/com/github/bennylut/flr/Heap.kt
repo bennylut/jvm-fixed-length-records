@@ -1,11 +1,13 @@
 package com.github.bennylut.flr
 
 import net.openhft.chronicle.core.OS
+import java.io.Closeable
 import kotlin.reflect.KClass
 
 class Heap private constructor(
         private var ptr: Long,
-        private var size: Long) {
+        private var size: Long) : Closeable {
+
 
     companion object {
         private val MEMORY = OS.memory()!!
@@ -17,7 +19,6 @@ class Heap private constructor(
 
         fun allocateRecords(type: Class<out FixedLengthRecord>, amount: Long): Heap {
             val size = FixedLengthRecord.Factory.compile(type).size
-            println("allocating ${size * amount}")
             return allocateBytes(size * amount)
         }
 
@@ -29,7 +30,7 @@ class Heap private constructor(
         if (ptr == 0L) throw IllegalStateException("free")
         if (offset < 0 || offset >= size) throw IndexOutOfBoundsException("offset !in [0,$size)")
         if (offset + flr.size() > size) throw  IndexOutOfBoundsException("will not fit")
-        flr.pointTo(ptr + offset)
+        flr._ref(ptr + offset)
         return flr
     }
 
@@ -43,7 +44,7 @@ class Heap private constructor(
         if (offset < 0 || offset >= size) throw IndexOutOfBoundsException("offset !in [0,$length)")
         if (offset + flr.size() * length > size) throw  IndexOutOfBoundsException("will not fit")
         val result = Vector(length, flr)
-        result.pointTo(offset + ptr)
+        result._ref(offset + ptr)
 
         return result
     }
@@ -52,7 +53,7 @@ class Heap private constructor(
             refRecords(T::class.create(), length, offset)
 
 
-    fun free() {
+    override fun close() {
         if (ptr != 0L) {
             MEMORY.freeMemory(ptr, size)
             ptr = 0
@@ -61,6 +62,8 @@ class Heap private constructor(
     }
 
     fun finalize() {
-        free()
+        if (ptr != 0L) {
+            System.err.println("memory leak detected! Heap of size $size is never freed")
+        }
     }
 }

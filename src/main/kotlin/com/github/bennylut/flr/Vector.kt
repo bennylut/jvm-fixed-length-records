@@ -1,12 +1,13 @@
 package com.github.bennylut.flr
 
+import com.github.bennylut.util.cast
 import net.openhft.chronicle.core.OS
 
 abstract class BaseVector(val length: Int) {
 
     protected var basePointer = 0L
 
-    fun pointTo(ptr: Long) {
+    fun _ref(ptr: Long) {
         basePointer = ptr
     }
 
@@ -14,9 +15,11 @@ abstract class BaseVector(val length: Int) {
 
 class Vector<T : FixedLengthRecord>(length: Int, private val flr: T) : BaseVector(length) {
 
-    operator fun get(i: Int): T {
-        flr.pointTo(basePointer + i * flr.size())
-        return flr
+    operator fun get(i: Int): T = get(i, flr._dup().cast())
+
+    operator fun get(i: Int, into: T): T {
+        into._ref(basePointer + i * flr.size())
+        return into
     }
 
     fun forEach(op: (Int, T) -> Unit) {
@@ -24,36 +27,35 @@ class Vector<T : FixedLengthRecord>(length: Int, private val flr: T) : BaseVecto
         val size = flr.size()
 
         for (i in 0 until length) {
-            clone.pointTo(basePointer + i * size)
+            clone._ref(basePointer + i * size)
             op(i, clone)
         }
     }
 
 }
 
-private val MEMORY = OS.memory()!!
+private val MEM = OS.memory()!!
 
 class IntVector(length: Int) : BaseVector(length) {
 
     operator fun get(i: Int): Int {
-        return MEMORY.readInt(basePointer + i * 4)
+        return MEM.readInt(basePointer + i * 4)
     }
 
     operator fun set(i: Int, v: Int) {
-        println("basepointer: $basePointer")
-        MEMORY.writeInt(basePointer + i * 4, v)
+        MEM.writeInt(basePointer + i * 4, v)
     }
 
-    inline fun forEach(op: (Int) -> Unit) {
+    inline fun forEach(op: (Int,Int) -> Unit) {
         for (i in 0 until length) {
-            op(get(i))
+            op(i,get(i))
         }
     }
 
     inline fun <R> map(opmap: (Int) -> R): ArrayList<R> {
         val result = ArrayList<R>(length)
-        forEach {
-            result.add(opmap(it))
+        forEach { i, v ->
+            result.add(opmap(v))
         }
         return result
     }
@@ -62,11 +64,11 @@ class IntVector(length: Int) : BaseVector(length) {
 class LongVector(size: Int) : BaseVector(size) {
 
     operator fun get(i: Int): Long {
-        return MEMORY.readLong(basePointer + i * 8)
+        return MEM.readLong(basePointer + i * 8)
     }
 
     operator fun set(i: Int, v: Long) {
-        MEMORY.writeLong(basePointer + i * 8, v)
+        MEM.writeLong(basePointer + i * 8, v)
     }
 
     inline fun forEach(op: (Long) -> Unit) {
@@ -79,11 +81,11 @@ class LongVector(size: Int) : BaseVector(size) {
 class FloatVector(size: Int) : BaseVector(size) {
 
     operator fun get(i: Int): Float {
-        return MEMORY.readFloat(basePointer + i * 4)
+        return MEM.readFloat(basePointer + i * 4)
     }
 
     operator fun set(i: Int, v: Float) {
-        MEMORY.writeFloat(basePointer + i * 4, v)
+        MEM.writeFloat(basePointer + i * 4, v)
     }
 
     inline fun forEach(op: (Float) -> Unit) {
@@ -96,11 +98,11 @@ class FloatVector(size: Int) : BaseVector(size) {
 class DoubleVector(size: Int) : BaseVector(size) {
 
     operator fun get(i: Int): Double {
-        return MEMORY.readDouble(basePointer + i * 8)
+        return MEM.readDouble(basePointer + i * 8)
     }
 
     operator fun set(i: Int, v: Double) {
-        MEMORY.writeDouble(basePointer + i * 8, v)
+        MEM.writeDouble(basePointer + i * 8, v)
     }
 
     inline fun forEach(op: (Double) -> Unit) {
@@ -113,11 +115,11 @@ class DoubleVector(size: Int) : BaseVector(size) {
 class ByteVector(size: Int) : BaseVector(size) {
 
     operator fun get(i: Int): Byte {
-        return MEMORY.readByte(basePointer + i)
+        return MEM.readByte(basePointer + i)
     }
 
     operator fun set(i: Int, v: Byte) {
-        MEMORY.writeByte(basePointer + i, v)
+        MEM.writeByte(basePointer + i, v)
     }
 
     inline fun forEach(op: (Byte) -> Unit) {

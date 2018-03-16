@@ -23,9 +23,13 @@ import kotlin.reflect.jvm.javaGetter
 import kotlin.reflect.jvm.javaMethod
 
 interface FixedLengthRecord {
-    fun pointTo(address: Long)
     fun size(): Int
-    fun _cloneRef(): FixedLengthRecord
+
+    //TODO: move those into an hidden interface
+    fun _ref(address: Long)
+
+    fun _ptr(): Long
+    fun _dup(): FixedLengthRecord
 
     object Factory {
         private val INAME_OBJECT = Any::class.iname()
@@ -94,9 +98,10 @@ interface FixedLengthRecord {
                     writeFieldAccessor(iname, field)
                 }
 
-                writePointTo(iname, ast)
-                writeCloneRef(iname, ast)
+                writeRef(iname, ast)
+                writeDup(iname, ast)
                 writeSize(iname, ast)
+                writePtr(iname, ast)
 
                 visitEnd()
             }.toByteArray()
@@ -108,8 +113,8 @@ interface FixedLengthRecord {
             return CompiledRecordFactory(clazz, ast.size)
         }
 
-        private fun ClassWriter.writePointTo(iname: String, ast: RecordAST) {
-            visitMethod(ACC_PUBLIC, "pointTo", "(J)V", null, null).apply {
+        private fun ClassWriter.writeRef(iname: String, ast: RecordAST) {
+            visitMethod(ACC_PUBLIC, "_ref", "(J)V", null, null).apply {
                 visitCode()
 
                 //first update my own pointer
@@ -128,9 +133,9 @@ interface FixedLengthRecord {
                         visitInsn(LADD)
 
                         if (field.isVector) {
-                            visitMethodInsn(INVOKEVIRTUAL, INAME_BASE_VECTOR, "pointTo", "(J)V", false)
+                            visitMethodInsn(INVOKEVIRTUAL, INAME_BASE_VECTOR, "_ref", "(J)V", false)
                         } else {
-                            visitMethodInsn(INVOKEINTERFACE, INAME_FLR, "pointTo", "(J)V", true)
+                            visitMethodInsn(INVOKEINTERFACE, INAME_FLR, "_ref", "(J)V", true)
                         }
 
                     }
@@ -142,8 +147,8 @@ interface FixedLengthRecord {
             }
         }
 
-        private fun ClassWriter.writeCloneRef(iname: String, ast: RecordAST) {
-            visitMethod(ACC_PUBLIC, "_cloneRef", "()${IDESC_FLR}", null, null).apply {
+        private fun ClassWriter.writeDup(iname: String, ast: RecordAST) {
+            visitMethod(ACC_PUBLIC, "_dup", "()${IDESC_FLR}", null, null).apply {
                 visitCode()
 
                 //crate new
@@ -151,17 +156,20 @@ interface FixedLengthRecord {
                 visitInsn(DUP)
                 visitMethodInsn(INVOKESPECIAL, iname, "<init>", "()V", false)
 
-                //2 on stack
-                visitInsn(DUP)
+                visitInsn(ARETURN)
+                visitMaxs(-1, -1)
+                visitEnd()
+            }
+        }
 
-                //pointer on stack
+        private fun ClassWriter.writePtr(iname: String, ast: RecordAST) {
+            visitMethod(ACC_PUBLIC, "_ptr", "()J", null, null).apply {
+                visitCode()
+
                 visitVarInsn(ALOAD, 0)
                 visitFieldInsn(GETFIELD, iname, "pointer", "J")
 
-                //1 on stack but points to me
-                visitMethodInsn(INVOKEVIRTUAL, iname, "pointTo", "(J)V", false)
-
-                visitInsn(ARETURN)
+                visitInsn(LRETURN)
                 visitMaxs(-1, -1)
                 visitEnd()
             }
@@ -488,4 +496,8 @@ class CompilationException : RuntimeException {
 annotation class Layout(val layoutString: String)
 
 fun <T : FixedLengthRecord> KClass<T>.create() = FixedLengthRecord.Factory.create(this)
-inline fun <T : FixedLengthRecord> T.cloneRef() = _cloneRef() as T
+inline fun <T : FixedLengthRecord> T.cloneRef(): T {
+    val dup = _dup()
+    dup._ref(_ptr())
+    return dup.cast()
+}

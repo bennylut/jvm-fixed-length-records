@@ -2,6 +2,7 @@ package com.github.bennylut
 
 import com.github.bennylut.flr.*
 import com.github.bennylut.util.cast
+import kotlin.system.measureTimeMillis
 
 
 @Layout("x,y,xs[10]")
@@ -18,35 +19,49 @@ interface Example2 : FixedLengthRecord {
 
 
 fun main(args: Array<String>) {
-    val heap = Heap.allocateRecords(Example::class, 2)
+    Heap.allocateRecords(Example::class, 2).use { heap ->
 
-    val example: Vector<Example> = heap.refRecords(2)
-    val example2: Example2 = heap.refRecord()
+        val example: Vector<Example> = heap.refRecords(2)
+        val example2: Example2 = heap.refRecord()
 
-    println("A")
+        while (true) {
+            val array = IntArray(12)
+            val timenat = measureTimeMillis {
+                for (x in 1..100000000) {
+                    for (i in 0 until 12) {
+                        array[(x + i) % 12] = x
+                    }
+                }
+            }
 
-    example.forEach { i, e ->
-        println("X")
-        e.x = i
+            println("timenat: $timenat")
+
+            println("before time")
+            val time = measureTimeMillis {
+                for (x in 1..100000000) {
+                    example.forEach { i, e ->
+                        e.x = i
 
 
-        println("Y")
-        e.y = i + 0.1
-        println("XS")
-        for (j in 0 until e.xs.length) {
-            e.xs[j] = j + i
+                        e.y = i + 0.1
+                        for (j in 0 until e.xs.length) {
+                            val len = e.xs.length
+                            e.xs[j] = j + i
+                        }
+                    }
+                }
+            }
+
+            println("took: $time")
+
         }
-    }
-    println("B")
+        val e0: Example = example[0]
+        val e1 = example[1]
 
-    val e0: Example = example[0].cloneRef()
-    val e1 = example[1].cloneRef()
+        val v1 = example2.z[0]
+        val v2 = example2.z[1]
 
-    println("C")
-    val v1 = example2.z[0].cloneRef()
-    val v2 = example2.z[1].cloneRef()
-
-    println("""
+        println("""
         example:
              [0] x=${e0.x}, y=${e0.y}, xs=${e0.xs.map { "$it" }}
              [1] x=${e1.x}, y=${e1.y}, xs=${e1.xs.map { "$it" }}
@@ -54,6 +69,8 @@ fun main(args: Array<String>) {
          example2:
              [0] x=${v1.x}, y=${v1.y}, xs=${v1.xs.map { "$it" }}
              [1] x=${v2.x}, y=${v2.y}, xs=${v2.xs.map { "$it" }}
-    """)
+        """)
+
+    }
 
 }
